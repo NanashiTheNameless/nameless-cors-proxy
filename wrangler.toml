@@ -1,0 +1,22 @@
+# wrangler.toml (wrangler ^4.71.0)
+
+name="nameless-cors-proxy"
+main="index.ts"
+compatibility_date="2026-02-24"
+
+workers_dev=false
+
+send_metrics=false
+
+[[routes]]
+pattern="cors.namelessnanashi.dev/*"
+zone_name="namelessnanashi.dev"
+
+[observability]
+enabled=false
+
+[placement]
+mode="smart"
+
+[assets]
+directory="./0xProto"

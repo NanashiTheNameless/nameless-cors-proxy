@@ -1,0 +1,19 @@
+{
+  "name": "nameless-cors-proxy",
+  "version": "0.0.0",
+  "license": "PolyForm-Noncommercial-1.0.0-customized",
+  "packageManager": "yarn@4.13.0",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260307.1",
+    "@typescript-eslint/eslint-plugin": "^8.56.1",
+    "@typescript-eslint/parser": "^8.56.1",
+    "eslint": "^10.0.3",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.71.0"
+  },
+  "private": true,
+  "scripts": {
+    "start": "wrangler dev",
+    "deploy": "wrangler deploy"
+  }
+}
