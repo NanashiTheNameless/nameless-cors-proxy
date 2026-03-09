@@ -1,9 +1,5 @@
 # nameless-cors-proxy
 
-## Usage / Deployment
-
-- Don't. If you need a guide this isn't for you.
-
 ## License
 
 This project is source-available under a modified PolyForm Noncommercial 1.0.0.
