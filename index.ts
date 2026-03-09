@@ -1,284 +1,284 @@
-import { proxyConfig } from "./config";
+import { proxyConfig } from './config'
 
-const ALLOWED_METHODS = "GET,HEAD,POST,OPTIONS";
-const ALLOWED_PROTOCOLS = new Set(["http:", "https:"]);
-const ALLOWED_METHOD_SET = new Set(["GET", "HEAD", "POST", "OPTIONS"]);
-const ALLOWED_FETCH_METADATA_SITES = new Set(["same-origin", "same-site"]);
-const ALLOWED_FETCH_METADATA_MODES = new Set(["cors", "same-origin"]);
-const ALLOWED_FETCH_METADATA_DEST = "empty";
-const DEFAULT_WARNING_LINE = "You should not be here.";
+const ALLOWED_METHODS = 'GET,HEAD,POST,OPTIONS'
+const ALLOWED_PROTOCOLS = new Set(['http:', 'https:'])
+const ALLOWED_METHOD_SET = new Set(['GET', 'HEAD', 'POST', 'OPTIONS'])
+const ALLOWED_FETCH_METADATA_SITES = new Set(['same-origin', 'same-site'])
+const ALLOWED_FETCH_METADATA_MODES = new Set(['cors', 'same-origin'])
+const ALLOWED_FETCH_METADATA_DEST = 'empty'
+const DEFAULT_WARNING_LINE = 'You should not be here.'
 const RARE_WARNING_LINE =
-  "This place is not a place of honor... No highly esteemed deed is commemorated here... Nothing valued is here...";
-const RARE_WARNING_PROBABILITY = 0.1;
-const NO_STORE_CACHE_CONTROL = "no-store";
+  'This place is not a place of honor... No highly esteemed deed is commemorated here... Nothing valued is here...'
+const RARE_WARNING_PROBABILITY = 0.1
+const NO_STORE_CACHE_CONTROL = 'no-store'
 const FETCH_METADATA_VARY_VALUE =
-  "Origin, Sec-Fetch-Site, Sec-Fetch-Mode, Sec-Fetch-Dest";
-const PROXY_USAGE_URL = createProxyUsageUrl();
-const ALLOWED_ORIGIN_DESCRIPTION = createAllowedOriginDescription();
+  'Origin, Sec-Fetch-Site, Sec-Fetch-Mode, Sec-Fetch-Dest'
+const PROXY_USAGE_URL = createProxyUsageUrl()
+const ALLOWED_ORIGIN_DESCRIPTION = createAllowedOriginDescription()
 const STRIPPED_UPSTREAM_HEADERS = new Set([
-  "accept-encoding",
-  "authorization",
-  "connection",
-  "content-length",
-  "cookie",
-  "cookie2",
-  "forwarded",
-  "host",
-  "keep-alive",
-  "origin",
-  "proxy-authenticate",
-  "proxy-authorization",
-  "proxy-connection",
-  "referer",
-  "te",
-  "trailer",
-  "transfer-encoding",
-  "upgrade",
-  "via",
-  "x-real-ip",
-]);
-const STRIPPED_UPSTREAM_HEADER_PREFIXES = ["cf-", "sec-", "x-forwarded-"];
+  'accept-encoding',
+  'authorization',
+  'connection',
+  'content-length',
+  'cookie',
+  'cookie2',
+  'forwarded',
+  'host',
+  'keep-alive',
+  'origin',
+  'proxy-authenticate',
+  'proxy-authorization',
+  'proxy-connection',
+  'referer',
+  'te',
+  'trailer',
+  'transfer-encoding',
+  'upgrade',
+  'via',
+  'x-real-ip'
+])
+const STRIPPED_UPSTREAM_HEADER_PREFIXES = ['cf-', 'sec-', 'x-forwarded-']
 
 type TargetUrlState =
-  | { kind: "absent" }
-  | { kind: "missing" }
-  | { kind: "invalid" }
-  | { kind: "unsupported"; targetUrl: URL }
-  | { kind: "valid"; targetUrl: URL };
+  | { kind: 'absent' }
+  | { kind: 'missing' }
+  | { kind: 'invalid' }
+  | { kind: 'unsupported', targetUrl: URL }
+  | { kind: 'valid', targetUrl: URL }
 
-function matchesHostnamePattern(hostname: string, pattern: string): boolean {
-  const normalizedPattern = pattern.toLowerCase();
+function matchesHostnamePattern (hostname: string, pattern: string): boolean {
+  const normalizedPattern = pattern.toLowerCase()
 
-  if (normalizedPattern.startsWith("*.")) {
-    const baseHostname = normalizedPattern.slice(2);
-    const suffix = `.${baseHostname}`;
+  if (normalizedPattern.startsWith('*.')) {
+    const baseHostname = normalizedPattern.slice(2)
+    const suffix = `.${baseHostname}`
 
-    return hostname === baseHostname || hostname.endsWith(suffix);
+    return hostname === baseHostname || hostname.endsWith(suffix)
   }
 
-  return hostname === normalizedPattern;
+  return hostname === normalizedPattern
 }
 
-function isAllowedHostname(hostname: string): boolean {
-  const normalizedHostname = hostname.toLowerCase();
+function isAllowedHostname (hostname: string): boolean {
+  const normalizedHostname = hostname.toLowerCase()
 
   return proxyConfig.allowedOriginHostPatterns.some((pattern) =>
-    matchesHostnamePattern(normalizedHostname, pattern),
-  );
+    matchesHostnamePattern(normalizedHostname, pattern)
+  )
 }
 
-function parseUrl(value: string): URL | null {
+function parseUrl (value: string): URL | null {
   try {
-    return new URL(value);
+    return new URL(value)
   } catch {
-    return null;
+    return null
   }
 }
 
-function isAllowedSiteUrl(url: URL): boolean {
-  return ALLOWED_PROTOCOLS.has(url.protocol) && isAllowedHostname(url.hostname);
+function isAllowedSiteUrl (url: URL): boolean {
+  return ALLOWED_PROTOCOLS.has(url.protocol) && isAllowedHostname(url.hostname)
 }
 
-function isAllowedTargetUrl(url: URL): boolean {
-  return ALLOWED_PROTOCOLS.has(url.protocol);
+function isAllowedTargetUrl (url: URL): boolean {
+  return ALLOWED_PROTOCOLS.has(url.protocol)
 }
 
-function createProxyUsageUrl(): string {
-  const usageUrl = new URL(proxyConfig.publicUrl);
-  usageUrl.hash = "";
-  usageUrl.search = "";
-  usageUrl.searchParams.set("url", "<URL_ENCODED_TARGET_URL>");
+function createProxyUsageUrl (): string {
+  const usageUrl = new URL(proxyConfig.publicUrl)
+  usageUrl.hash = ''
+  usageUrl.search = ''
+  usageUrl.searchParams.set('url', '<URL_ENCODED_TARGET_URL>')
 
-  return usageUrl.toString();
+  return usageUrl.toString()
 }
 
-function createAllowedOriginDescription(): string {
-  const patterns = proxyConfig.allowedOriginHostPatterns.join(", ");
+function createAllowedOriginDescription (): string {
+  const patterns = proxyConfig.allowedOriginHostPatterns.join(', ')
 
   if (proxyConfig.allowedOriginHostPatterns.length === 1) {
-    return `Only ${patterns} may use this proxy.`;
+    return `Only ${patterns} may use this proxy.`
   }
 
-  return `Only these host patterns may use this proxy:\n${patterns}`;
+  return `Only these host patterns may use this proxy:\n${patterns}`
 }
 
-function getAllowedOrigin(request: Request): URL | null {
-  const origin = request.headers.get("Origin");
+function getAllowedOrigin (request: Request): URL | null {
+  const origin = request.headers.get('Origin')
 
   if (!origin) {
-    return null;
+    return null
   }
 
-  const parsedOrigin = parseUrl(origin);
+  const parsedOrigin = parseUrl(origin)
 
-  return parsedOrigin && isAllowedSiteUrl(parsedOrigin) ? parsedOrigin : null;
+  return (parsedOrigin != null) && isAllowedSiteUrl(parsedOrigin) ? parsedOrigin : null
 }
 
-function createCorsHeaders(origin: string) {
+function createCorsHeaders (origin: string) {
   return {
-    "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Methods": ALLOWED_METHODS,
-    "Access-Control-Max-Age": "86400",
-    "Access-Control-Expose-Headers": "*",
-    "Cross-Origin-Resource-Policy": "same-site",
-    Vary: FETCH_METADATA_VARY_VALUE,
-  };
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Methods': ALLOWED_METHODS,
+    'Access-Control-Max-Age': '86400',
+    'Access-Control-Expose-Headers': '*',
+    'Cross-Origin-Resource-Policy': 'same-site',
+    Vary: FETCH_METADATA_VARY_VALUE
+  }
 }
 
-function isAllowedMethod(method: string): boolean {
-  return ALLOWED_METHOD_SET.has(method);
+function isAllowedMethod (method: string): boolean {
+  return ALLOWED_METHOD_SET.has(method)
 }
 
-function createMethodNotAllowedResponse(
-  headers: Record<string, string> = {},
+function createMethodNotAllowedResponse (
+  headers: Record<string, string> = {}
 ) {
   return new Response(null, {
     status: 405,
-    statusText: "Method Not Allowed",
+    statusText: 'Method Not Allowed',
     headers: {
-      "cache-control": NO_STORE_CACHE_CONTROL,
+      'cache-control': NO_STORE_CACHE_CONTROL,
       Allow: ALLOWED_METHODS,
-      ...headers,
-    },
-  });
+      ...headers
+    }
+  })
 }
 
-function textResponse(
+function textResponse (
   body: string | null,
   status: number,
-  headers: Record<string, string> = {},
+  headers: Record<string, string> = {}
 ) {
   return new Response(body, {
     status,
     headers: {
-      "cache-control": NO_STORE_CACHE_CONTROL,
-      "content-type": "text/plain;charset=UTF-8",
-      ...headers,
-    },
-  });
+      'cache-control': NO_STORE_CACHE_CONTROL,
+      'content-type': 'text/plain;charset=UTF-8',
+      ...headers
+    }
+  })
 }
 
-function htmlResponse(
+function htmlResponse (
   body: string,
   status: number,
-  headers: Record<string, string> = {},
+  headers: Record<string, string> = {}
 ) {
   return new Response(body, {
     status,
     headers: {
-      "cache-control": NO_STORE_CACHE_CONTROL,
-      "content-type": "text/html;charset=UTF-8",
-      ...headers,
-    },
-  });
+      'cache-control': NO_STORE_CACHE_CONTROL,
+      'content-type': 'text/html;charset=UTF-8',
+      ...headers
+    }
+  })
 }
 
-function getTargetUrlState(requestUrl: URL): TargetUrlState {
-  if (!requestUrl.searchParams.has("url")) {
-    return { kind: "absent" };
+function getTargetUrlState (requestUrl: URL): TargetUrlState {
+  if (!requestUrl.searchParams.has('url')) {
+    return { kind: 'absent' }
   }
 
-  const rawTargetUrl = requestUrl.searchParams.get("url") ?? "";
+  const rawTargetUrl = requestUrl.searchParams.get('url') ?? ''
 
   if (!rawTargetUrl) {
-    return { kind: "missing" };
+    return { kind: 'missing' }
   }
 
-  const targetUrl = parseUrl(rawTargetUrl);
+  const targetUrl = parseUrl(rawTargetUrl)
 
-  if (!targetUrl) {
-    return { kind: "invalid" };
+  if (targetUrl == null) {
+    return { kind: 'invalid' }
   }
 
   if (!isAllowedTargetUrl(targetUrl)) {
-    return { kind: "unsupported", targetUrl };
+    return { kind: 'unsupported', targetUrl }
   }
 
-  return { kind: "valid", targetUrl };
+  return { kind: 'valid', targetUrl }
 }
 
-function escapeHtml(value: string): string {
+function escapeHtml (value: string): string {
   return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
 }
 
-function getWarningLine(): string {
+function getWarningLine (): string {
   return Math.random() < RARE_WARNING_PROBABILITY
     ? RARE_WARNING_LINE
-    : DEFAULT_WARNING_LINE;
+    : DEFAULT_WARNING_LINE
 }
 
-function getErrorPrefixLines(): string[] {
+function getErrorPrefixLines (): string[] {
   return [
-    ...ALLOWED_ORIGIN_DESCRIPTION.split("\n"),
-    "",
+    ...ALLOWED_ORIGIN_DESCRIPTION.split('\n'),
+    '',
     getWarningLine(),
-    "",
-  ];
+    ''
+  ]
 }
 
-function getErrorLines(...lines: string[]): string[] {
-  return [...getErrorPrefixLines(), ...lines];
+function getErrorLines (...lines: string[]): string[] {
+  return [...getErrorPrefixLines(), ...lines]
 }
 
-function getErrorMessage(...lines: string[]): string {
-  return getErrorLines(...lines).join("\n");
+function getErrorMessage (...lines: string[]): string {
+  return getErrorLines(...lines).join('\n')
 }
 
-function getMissingUrlMessage(): string {
+function getMissingUrlMessage (): string {
   return getErrorMessage(
-    "Missing url query parameter.",
-    "Add ?url=<URL_ENCODED_TARGET_URL>.",
-  );
+    'Missing url query parameter.',
+    'Add ?url=<URL_ENCODED_TARGET_URL>.'
+  )
 }
 
-function getInvalidUrlMessage(): string {
+function getInvalidUrlMessage (): string {
   return getErrorMessage(
-    "Invalid url query parameter.",
-    "The url query parameter must be a URL-encoded absolute http or https URL.",
-  );
+    'Invalid url query parameter.',
+    'The url query parameter must be a URL-encoded absolute http or https URL.'
+  )
 }
 
-function getUnsupportedUrlMessage(): string {
-  return getErrorMessage("Target URL must use http or https.");
+function getUnsupportedUrlMessage (): string {
+  return getErrorMessage('Target URL must use http or https.')
 }
 
-function getUnauthorizedMessage(targetUrl: URL): string {
+function getUnauthorizedMessage (targetUrl: URL): string {
   return getErrorMessage(
-    "Please go directly to your destination:",
-    targetUrl.toString(),
-  );
+    'Please go directly to your destination:',
+    targetUrl.toString()
+  )
 }
 
-function getUnauthorizedLines(targetUrl: URL): string[] {
-  const safeTargetUrl = escapeHtml(targetUrl.toString());
+function getUnauthorizedLines (targetUrl: URL): string[] {
+  const safeTargetUrl = escapeHtml(targetUrl.toString())
 
   return getErrorLines(
-    "Please go directly to your destination:",
-    `<a href="${safeTargetUrl}">${safeTargetUrl}</a>`,
-  );
+    'Please go directly to your destination:',
+    `<a href="${safeTargetUrl}">${safeTargetUrl}</a>`
+  )
 }
 
-function shouldRenderHtml(request: Request): boolean {
-  const accept = request.headers.get("Accept") ?? "";
-  const fetchDestination = request.headers.get("Sec-Fetch-Dest") ?? "";
+function shouldRenderHtml (request: Request): boolean {
+  const accept = request.headers.get('Accept') ?? ''
+  const fetchDestination = request.headers.get('Sec-Fetch-Dest') ?? ''
 
   return (
-    request.method === "GET" &&
-    (accept.includes("text/html") ||
-      fetchDestination === "document" ||
-      fetchDestination === "iframe")
-  );
+    request.method === 'GET' &&
+    (accept.includes('text/html') ||
+      fetchDestination === 'document' ||
+      fetchDestination === 'iframe')
+  )
 }
 
-function hasBrowserFetchMetadata(request: Request): boolean {
-  const fetchSite = request.headers.get("Sec-Fetch-Site");
-  const fetchMode = request.headers.get("Sec-Fetch-Mode");
-  const fetchDest = request.headers.get("Sec-Fetch-Dest");
+function hasBrowserFetchMetadata (request: Request): boolean {
+  const fetchSite = request.headers.get('Sec-Fetch-Site')
+  const fetchMode = request.headers.get('Sec-Fetch-Mode')
+  const fetchDest = request.headers.get('Sec-Fetch-Dest')
 
   return (
     fetchSite !== null &&
@@ -287,43 +287,43 @@ function hasBrowserFetchMetadata(request: Request): boolean {
     ALLOWED_FETCH_METADATA_SITES.has(fetchSite) &&
     ALLOWED_FETCH_METADATA_MODES.has(fetchMode) &&
     fetchDest === ALLOWED_FETCH_METADATA_DEST
-  );
+  )
 }
 
-function getBrowserMetadataRequiredMessage(): string {
+function getBrowserMetadataRequiredMessage (): string {
   return getErrorMessage(
-    "Browser fetch metadata required.",
-    "This proxy only accepts browser fetch() requests from allowed site origins.",
-  );
+    'Browser fetch metadata required.',
+    'This proxy only accepts browser fetch() requests from allowed site origins.'
+  )
 }
 
-function shouldForwardUpstreamHeader(headerName: string): boolean {
-  const normalizedHeaderName = headerName.toLowerCase();
+function shouldForwardUpstreamHeader (headerName: string): boolean {
+  const normalizedHeaderName = headerName.toLowerCase()
 
   return (
     !STRIPPED_UPSTREAM_HEADERS.has(normalizedHeaderName) &&
     !STRIPPED_UPSTREAM_HEADER_PREFIXES.some((prefix) =>
-      normalizedHeaderName.startsWith(prefix),
+      normalizedHeaderName.startsWith(prefix)
     )
-  );
+  )
 }
 
-function createUpstreamHeaders(request: Request, targetUrl: URL): Headers {
-  const upstreamHeaders = new Headers();
+function createUpstreamHeaders (request: Request, targetUrl: URL): Headers {
+  const upstreamHeaders = new Headers()
 
   for (const [name, value] of request.headers) {
     if (shouldForwardUpstreamHeader(name)) {
-      upstreamHeaders.set(name, value);
+      upstreamHeaders.set(name, value)
     }
   }
 
-  upstreamHeaders.set("Origin", targetUrl.origin);
+  upstreamHeaders.set('Origin', targetUrl.origin)
 
-  return upstreamHeaders;
+  return upstreamHeaders
 }
 
-function renderStatusPage(lines: string[]): string {
-  const lineMarkup = lines.map((line) => `<div class="line">${line}</div>`).join("");
+function renderStatusPage (lines: string[]): string {
+  const lineMarkup = lines.map((line) => `<div class="line">${line}</div>`).join('')
 
   return `<!doctype html>
 <html lang="en">
@@ -471,176 +471,176 @@ function renderStatusPage(lines: string[]): string {
       })();
     </script>
   </body>
-</html>`;
+</html>`
 }
 
-function getDocumentErrorResponse(targetUrlState: TargetUrlState): Response {
+function getDocumentErrorResponse (targetUrlState: TargetUrlState): Response {
   switch (targetUrlState.kind) {
-    case "absent":
-    case "missing":
+    case 'absent':
+    case 'missing':
       return htmlResponse(
         renderStatusPage(getErrorLines(
-          "Missing url query parameter.",
-          "Add ?url=&lt;URL_ENCODED_TARGET_URL&gt; to this proxy URL.",
+          'Missing url query parameter.',
+          'Add ?url=&lt;URL_ENCODED_TARGET_URL&gt; to this proxy URL.'
         )),
-        400,
-      );
-    case "invalid":
+        400
+      )
+    case 'invalid':
       return htmlResponse(
         renderStatusPage(getErrorLines(
-          "Invalid url query parameter.",
-          "The url query parameter must be a URL-encoded absolute http or https URL.",
+          'Invalid url query parameter.',
+          'The url query parameter must be a URL-encoded absolute http or https URL.'
         )),
-        400,
-      );
-    case "unsupported":
+        400
+      )
+    case 'unsupported':
       return htmlResponse(
         renderStatusPage(getErrorLines(
-          "Target URL must use http or https.",
-          `The provided URL uses an unsupported protocol: <code>${escapeHtml(targetUrlState.targetUrl.protocol)}</code>.`,
+          'Target URL must use http or https.',
+          `The provided URL uses an unsupported protocol: <code>${escapeHtml(targetUrlState.targetUrl.protocol)}</code>.`
         )),
-        403,
-      );
-    case "valid":
+        403
+      )
+    case 'valid':
       return htmlResponse(
         renderStatusPage(getUnauthorizedLines(targetUrlState.targetUrl)),
-        403,
-      );
+        403
+      )
   }
 }
 
-function getTextErrorResponse(targetUrlState: TargetUrlState): Response {
+function getTextErrorResponse (targetUrlState: TargetUrlState): Response {
   switch (targetUrlState.kind) {
-    case "absent":
-    case "missing":
-      return textResponse(getMissingUrlMessage(), 400);
-    case "invalid":
-      return textResponse(getInvalidUrlMessage(), 400);
-    case "unsupported":
-      return textResponse(getUnsupportedUrlMessage(), 403);
-    case "valid":
-      return textResponse(getUnauthorizedMessage(targetUrlState.targetUrl), 403);
+    case 'absent':
+    case 'missing':
+      return textResponse(getMissingUrlMessage(), 400)
+    case 'invalid':
+      return textResponse(getInvalidUrlMessage(), 400)
+    case 'unsupported':
+      return textResponse(getUnsupportedUrlMessage(), 403)
+    case 'valid':
+      return textResponse(getUnauthorizedMessage(targetUrlState.targetUrl), 403)
   }
 }
 
-function publicErrorResponse(request: Request, targetUrlState: TargetUrlState): Response {
+function publicErrorResponse (request: Request, targetUrlState: TargetUrlState): Response {
   if (shouldRenderHtml(request)) {
-    return getDocumentErrorResponse(targetUrlState);
+    return getDocumentErrorResponse(targetUrlState)
   }
 
-  return getTextErrorResponse(targetUrlState);
+  return getTextErrorResponse(targetUrlState)
 }
 
 export default {
-  async fetch(request: Request) {
-    const url = new URL(request.url);
-    const targetUrlState = getTargetUrlState(url);
-    const allowedOrigin = getAllowedOrigin(request);
+  async fetch (request: Request) {
+    const url = new URL(request.url)
+    const targetUrlState = getTargetUrlState(url)
+    const allowedOrigin = getAllowedOrigin(request)
 
-    if (!allowedOrigin) {
-      return publicErrorResponse(request, targetUrlState);
+    if (allowedOrigin == null) {
+      return publicErrorResponse(request, targetUrlState)
     }
 
-    const origin = allowedOrigin.origin;
-    const corsHeaders = createCorsHeaders(origin);
+    const origin = allowedOrigin.origin
+    const corsHeaders = createCorsHeaders(origin)
 
     switch (targetUrlState.kind) {
-      case "missing":
-        return textResponse(getMissingUrlMessage(), 400, corsHeaders);
-      case "invalid":
-        return textResponse(getInvalidUrlMessage(), 400, corsHeaders);
-      case "unsupported":
-        return textResponse(getUnsupportedUrlMessage(), 403, corsHeaders);
-      case "absent":
-        break;
-      case "valid":
-        break;
+      case 'missing':
+        return textResponse(getMissingUrlMessage(), 400, corsHeaders)
+      case 'invalid':
+        return textResponse(getInvalidUrlMessage(), 400, corsHeaders)
+      case 'unsupported':
+        return textResponse(getUnsupportedUrlMessage(), 403, corsHeaders)
+      case 'absent':
+        break
+      case 'valid':
+        break
     }
 
-    function infoResponse(json: string) {
+    function infoResponse (json: string) {
       return new Response(json, {
         status: 200,
         headers: {
-          "cache-control": NO_STORE_CACHE_CONTROL,
-          "content-type": "application/json;charset=UTF-8",
-          ...corsHeaders,
-        },
-      });
+          'cache-control': NO_STORE_CACHE_CONTROL,
+          'content-type': 'application/json;charset=UTF-8',
+          ...corsHeaders
+        }
+      })
     }
 
-    async function handleOptions(request: Request) {
+    async function handleOptions (request: Request) {
       if (
-        request.headers.get("Origin") !== null &&
-        request.headers.get("Access-Control-Request-Method") !== null
+        request.headers.get('Origin') !== null &&
+        request.headers.get('Access-Control-Request-Method') !== null
       ) {
         return new Response(null, {
           headers: {
-            "cache-control": NO_STORE_CACHE_CONTROL,
+            'cache-control': NO_STORE_CACHE_CONTROL,
             ...corsHeaders,
-            "Access-Control-Allow-Headers":
-              request.headers.get("Access-Control-Request-Headers") ?? "*",
-          },
-        });
+            'Access-Control-Allow-Headers':
+              request.headers.get('Access-Control-Request-Headers') ?? '*'
+          }
+        })
       }
 
       return new Response(null, {
         headers: {
-          "cache-control": NO_STORE_CACHE_CONTROL,
-          Allow: ALLOWED_METHODS,
-        },
-      });
+          'cache-control': NO_STORE_CACHE_CONTROL,
+          Allow: ALLOWED_METHODS
+        }
+      })
     }
 
-    if (request.method === "OPTIONS") {
-      return handleOptions(request);
+    if (request.method === 'OPTIONS') {
+      return await handleOptions(request)
     }
 
     if (!isAllowedMethod(request.method)) {
-      return createMethodNotAllowedResponse(corsHeaders);
+      return createMethodNotAllowedResponse(corsHeaders)
     }
 
-    if (targetUrlState.kind === "valid" && !hasBrowserFetchMetadata(request)) {
-      return textResponse(getBrowserMetadataRequiredMessage(), 403, corsHeaders);
+    if (targetUrlState.kind === 'valid' && !hasBrowserFetchMetadata(request)) {
+      return textResponse(getBrowserMetadataRequiredMessage(), 403, corsHeaders)
     }
 
-    async function handleRequest(request: Request, targetUrl: URL) {
-      const upstreamHeaders = createUpstreamHeaders(request, targetUrl);
+    async function handleRequest (request: Request, targetUrl: URL) {
+      const upstreamHeaders = createUpstreamHeaders(request, targetUrl)
 
       const upstreamInit: RequestInit = {
         method: request.method,
         headers: upstreamHeaders,
-        redirect: "follow",
-      };
-
-      if (request.method !== "GET" && request.method !== "HEAD") {
-        upstreamInit.body = request.body;
+        redirect: 'follow'
       }
 
-      const upstreamResponse = await fetch(targetUrl.toString(), upstreamInit);
-      const response = new Response(upstreamResponse.body, upstreamResponse);
+      if (request.method !== 'GET' && request.method !== 'HEAD') {
+        upstreamInit.body = request.body
+      }
 
-      response.headers.set("Access-Control-Allow-Origin", origin);
-      response.headers.set("Access-Control-Expose-Headers", "*");
-      response.headers.append("Vary", "Origin");
-      response.headers.append("Vary", "Sec-Fetch-Site");
-      response.headers.append("Vary", "Sec-Fetch-Mode");
-      response.headers.append("Vary", "Sec-Fetch-Dest");
+      const upstreamResponse = await fetch(targetUrl.toString(), upstreamInit)
+      const response = new Response(upstreamResponse.body, upstreamResponse)
 
-      return response;
+      response.headers.set('Access-Control-Allow-Origin', origin)
+      response.headers.set('Access-Control-Expose-Headers', '*')
+      response.headers.append('Vary', 'Origin')
+      response.headers.append('Vary', 'Sec-Fetch-Site')
+      response.headers.append('Vary', 'Sec-Fetch-Mode')
+      response.headers.append('Vary', 'Sec-Fetch-Dest')
+
+      return response
     }
 
-    if (targetUrlState.kind === "valid") {
-      const { targetUrl } = targetUrlState;
+    if (targetUrlState.kind === 'valid') {
+      const { targetUrl } = targetUrlState
 
-      return handleRequest(request, targetUrl);
+      return await handleRequest(request, targetUrl)
     }
 
     const requesterInfo = JSON.stringify({
       warning: getWarningLine(),
       usage: PROXY_USAGE_URL,
-      origin,
-    });
+      origin
+    })
 
-    return infoResponse(requesterInfo);
-  },
-};
+    return infoResponse(requesterInfo)
+  }
+}
