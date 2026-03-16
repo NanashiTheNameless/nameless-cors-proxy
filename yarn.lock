@@ -60,10 +60,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@cloudflare/workers-types@npm:^4.20260307.1":
-  version: 4.20260307.1
-  resolution: "@cloudflare/workers-types@npm:4.20260307.1"
-  checksum: 10c0/994ef7a35a3d9b32dc514df89f94d47e4e024e91ea8fe35aae432b76f17cd66531da2ef4047709a510780b531405defaab45d3f6dce5585a08b35e4153c1accf
+"@cloudflare/workers-types@npm:^4.20260316.1":
+  version: 4.20260316.1
+  resolution: "@cloudflare/workers-types@npm:4.20260316.1"
+  checksum: 10c0/2de8b1ad46bde3aa21ad7a0a25214a3ee9cacb08ea1bc5eaa70a3f3fce29ee64aacca09cb336ca210d3e52686131c44e7dfc4a0110ddd7f265d6d8af108e5128
   languageName: node
   linkType: hard
 
@@ -1698,7 +1698,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "nameless-cors-proxy@workspace:."
   dependencies:
-    "@cloudflare/workers-types": "npm:^4.20260307.1"
+    "@cloudflare/workers-types": "npm:^4.20260316.1"
     "@typescript-eslint/eslint-plugin": "npm:^8.57.1"
     "@typescript-eslint/parser": "npm:^8.57.0"
     eslint: "npm:^10.0.3"
