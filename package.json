@@ -4,14 +4,17 @@
   "license": "PolyForm-Noncommercial-1.0.0-customized",
   "packageManager": "yarn@4.13.0",
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260316.1",
+    "@cloudflare/workers-types": "^4.20260317.1",
     "@typescript-eslint/eslint-plugin": "^8.57.1",
     "@typescript-eslint/parser": "^8.57.1",
     "eslint": "^10.0.3",
     "typescript": "^5.9.3",
-    "wrangler": "^4.74.0"
+    "wrangler": "^4.76.0"
   },
   "private": true,
+  "resolutions": {
+    "undici": "7.24.0"
+  },
   "scripts": {
     "start": "wrangler dev",
     "deploy": "wrangler deploy"

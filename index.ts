@@ -13,6 +13,9 @@ const RARE_WARNING_PROBABILITY = 0.1
 const NO_STORE_CACHE_CONTROL = 'no-store'
 const FETCH_METADATA_VARY_VALUE =
   'Origin, Sec-Fetch-Site, Sec-Fetch-Mode, Sec-Fetch-Dest'
+const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="22" fill="#000"/>
+</svg>`
 const PROXY_USAGE_URL = createProxyUsageUrl()
 const ALLOWED_ORIGIN_DESCRIPTION = createAllowedOriginDescription()
 const STRIPPED_UPSTREAM_HEADERS = new Set([
@@ -168,6 +171,20 @@ function htmlResponse (
     headers: {
       'cache-control': NO_STORE_CACHE_CONTROL,
       'content-type': 'text/html;charset=UTF-8',
+      ...headers
+    }
+  })
+}
+
+function svgResponse (
+  body: string | null,
+  headers: Record<string, string> = {}
+) {
+  return new Response(body, {
+    status: 200,
+    headers: {
+      'cache-control': 'public, max-age=86400',
+      'content-type': 'image/svg+xml;charset=UTF-8',
       ...headers
     }
   })
@@ -331,6 +348,7 @@ function renderStatusPage (lines: string[]): string {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Access Denied</title>
+    <link rel="icon" href="/favicon.ico" sizes="any" type="image/svg+xml">
     <!--
       This page uses the bundled 0xProto font.
       0xProto is Copyright (c) 2026, 0xType Project Authors and is licensed under the SIL Open Font License, Version 1.1.
@@ -534,6 +552,19 @@ function publicErrorResponse (request: Request, targetUrlState: TargetUrlState):
 export default {
   async fetch (request: Request) {
     const url = new URL(request.url)
+
+    if (url.pathname === '/favicon.ico') {
+      if (request.method === 'GET') {
+        return svgResponse(FAVICON_SVG)
+      }
+
+      if (request.method === 'HEAD') {
+        return svgResponse(null)
+      }
+
+      return createMethodNotAllowedResponse()
+    }
+
     const targetUrlState = getTargetUrlState(url)
     const allowedOrigin = getAllowedOrigin(request)
 
