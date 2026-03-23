@@ -6,7 +6,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260317.1",
     "@typescript-eslint/eslint-plugin": "^8.57.1",
-    "@typescript-eslint/parser": "^8.57.1",
+    "@typescript-eslint/parser": "^8.57.2",
     "eslint": "^10.0.3",
     "typescript": "^6.0.2",
     "wrangler": "^4.76.0"
