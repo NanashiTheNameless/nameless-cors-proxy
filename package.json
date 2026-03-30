@@ -9,7 +9,7 @@
     "@typescript-eslint/parser": "^8.57.2",
     "eslint": "^10.1.0",
     "typescript": "^6.0.2",
-    "wrangler": "^4.76.0"
+    "wrangler": "^4.78.0"
   },
   "private": true,
   "resolutions": {
