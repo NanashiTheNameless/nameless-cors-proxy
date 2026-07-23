@@ -21,10 +21,12 @@ const ALLOWED_ORIGIN_DESCRIPTION = createAllowedOriginDescription()
 const STRIPPED_UPSTREAM_HEADERS = new Set([
   'accept-encoding',
   'authorization',
+  'cdn-loop',
   'connection',
   'content-length',
   'cookie',
   'cookie2',
+  'expect',
   'forwarded',
   'host',
   'keep-alive',
@@ -36,17 +38,52 @@ const STRIPPED_UPSTREAM_HEADERS = new Set([
   'te',
   'trailer',
   'transfer-encoding',
+  'true-client-ip',
   'upgrade',
   'via',
   'x-real-ip'
 ])
 const STRIPPED_UPSTREAM_HEADER_PREFIXES = ['cf-', 'sec-', 'x-forwarded-']
 
+// Headers from the upstream response that must never reach the client. Set-Cookie
+// would let an arbitrary target set cookies scoped to the proxy's parent domain,
+// and Clear-Site-Data would let it wipe state for the proxy origin.
+const STRIPPED_DOWNSTREAM_HEADERS = new Set([
+  'clear-site-data',
+  'connection',
+  'keep-alive',
+  'proxy-authenticate',
+  'proxy-authorization',
+  'public-key-pins',
+  'set-cookie',
+  'set-cookie2',
+  'strict-transport-security',
+  'te',
+  'timing-allow-origin',
+  'trailer',
+  'transfer-encoding',
+  'upgrade'
+])
+const STRIPPED_DOWNSTREAM_HEADER_PREFIXES = ['access-control-']
+
+const MAX_UPSTREAM_REDIRECTS = 5
+const MAX_REQUEST_BODY_BYTES = 10 * 1024 * 1024
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308])
+const PROXY_HOSTNAME = new URL(proxyConfig.publicUrl).hostname.toLowerCase()
+const BLOCKED_TARGET_HOSTNAMES = new Set(['localhost', ''])
+const BLOCKED_TARGET_HOSTNAME_SUFFIXES = [
+  '.localhost',
+  '.local',
+  '.internal',
+  '.home.arpa'
+]
+
 type TargetUrlState =
   | { kind: 'absent' }
   | { kind: 'missing' }
   | { kind: 'invalid' }
   | { kind: 'unsupported', targetUrl: URL }
+  | { kind: 'blocked', targetUrl: URL }
   | { kind: 'valid', targetUrl: URL }
 
 function matchesHostnamePattern (hostname: string, pattern: string): boolean {
@@ -84,6 +121,116 @@ function isAllowedSiteUrl (url: URL): boolean {
 
 function isAllowedTargetUrl (url: URL): boolean {
   return ALLOWED_PROTOCOLS.has(url.protocol)
+}
+
+// The URL parser normalizes every legacy IPv4 form (decimal, octal, hex, short
+// dotted) to dotted-quad, so matching the normalized hostname is sufficient.
+function parseIpv4Literal (hostname: string): number[] | null {
+  const parts = hostname.split('.')
+
+  if (parts.length !== 4) {
+    return null
+  }
+
+  const octets: number[] = []
+
+  for (const part of parts) {
+    if (!/^\d{1,3}$/.test(part)) {
+      return null
+    }
+
+    const octet = Number(part)
+
+    if (octet > 255) {
+      return null
+    }
+
+    octets.push(octet)
+  }
+
+  return octets
+}
+
+function isBlockedIpv4 (octets: number[]): boolean {
+  const [a, b] = octets
+
+  return (
+    a === 0 || // 0.0.0.0/8 "this network"
+    a === 10 || // RFC 1918
+    a === 127 || // loopback
+    (a === 100 && b >= 64 && b <= 127) || // RFC 6598 CGNAT
+    (a === 169 && b === 254) || // link-local, incl. cloud metadata
+    (a === 172 && b >= 16 && b <= 31) || // RFC 1918
+    (a === 192 && b === 0) || // IETF protocol assignments / TEST-NET-1
+    (a === 192 && b === 88) || // 6to4 relay anycast
+    (a === 192 && b === 168) || // RFC 1918
+    (a === 198 && (b === 18 || b === 19)) || // benchmarking
+    (a === 198 && b === 51) || // TEST-NET-2
+    (a === 203 && b === 0) || // TEST-NET-3
+    a >= 224 // multicast and reserved
+  )
+}
+
+function isBlockedIpv6 (hostname: string): boolean {
+  if (!hostname.startsWith('[') || !hostname.endsWith(']')) {
+    return false
+  }
+
+  const address = hostname.slice(1, -1).toLowerCase()
+
+  if (address === '::1' || address === '::') {
+    return true
+  }
+
+  // IPv4-mapped / IPv4-compatible addresses tunnel the IPv4 ranges above.
+  const embeddedIpv4 = address.split(':').pop() ?? ''
+  const embeddedOctets = parseIpv4Literal(embeddedIpv4)
+
+  if ((embeddedOctets != null) && isBlockedIpv4(embeddedOctets)) {
+    return true
+  }
+
+  return (
+    address.startsWith('fc') || // unique local
+    address.startsWith('fd') || // unique local
+    address.startsWith('fe8') || // link-local
+    address.startsWith('fe9') ||
+    address.startsWith('fea') ||
+    address.startsWith('feb') ||
+    address.startsWith('ff') // multicast
+  )
+}
+
+function isBlockedTargetHostname (hostname: string): boolean {
+  const normalizedHostname = hostname.toLowerCase().replace(/\.$/, '')
+
+  if (normalizedHostname === PROXY_HOSTNAME) {
+    return true // prevents recursive self-proxying
+  }
+
+  if (BLOCKED_TARGET_HOSTNAMES.has(normalizedHostname)) {
+    return true
+  }
+
+  if (
+    BLOCKED_TARGET_HOSTNAME_SUFFIXES.some((suffix) =>
+      normalizedHostname.endsWith(suffix)
+    )
+  ) {
+    return true
+  }
+
+  if (isBlockedIpv6(normalizedHostname)) {
+    return true
+  }
+
+  const octets = parseIpv4Literal(normalizedHostname)
+
+  return (octets != null) && isBlockedIpv4(octets)
+}
+
+function isBlockedTargetUrl (url: URL): boolean {
+  return isBlockedTargetHostname(url.hostname)
 }
 
 function createProxyUsageUrl (): string {
@@ -211,6 +358,10 @@ function getTargetUrlState (requestUrl: URL): TargetUrlState {
     return { kind: 'unsupported', targetUrl }
   }
 
+  if (isBlockedTargetUrl(targetUrl)) {
+    return { kind: 'blocked', targetUrl }
+  }
+
   return { kind: 'valid', targetUrl }
 }
 
@@ -262,6 +413,13 @@ function getInvalidUrlMessage (): string {
 
 function getUnsupportedUrlMessage (): string {
   return getErrorMessage('Target URL must use http or https.')
+}
+
+function getBlockedUrlMessage (): string {
+  return getErrorMessage(
+    'Target host is not reachable through this proxy.',
+    'Private, loopback, link-local and reserved hosts are blocked.'
+  )
 }
 
 function getUnauthorizedMessage (targetUrl: URL): string {
@@ -325,7 +483,7 @@ function shouldForwardUpstreamHeader (headerName: string): boolean {
   )
 }
 
-function createUpstreamHeaders (request: Request, targetUrl: URL): Headers {
+function createUpstreamHeaders (request: Request): Headers {
   const upstreamHeaders = new Headers()
 
   for (const [name, value] of request.headers) {
@@ -334,9 +492,41 @@ function createUpstreamHeaders (request: Request, targetUrl: URL): Headers {
     }
   }
 
-  upstreamHeaders.set('Origin', targetUrl.origin)
-
+  // No Origin is sent upstream. Forging one that matches the target would defeat
+  // Origin-based CSRF checks on every host reachable through this proxy.
   return upstreamHeaders
+}
+
+function shouldForwardDownstreamHeader (headerName: string): boolean {
+  const normalizedHeaderName = headerName.toLowerCase()
+
+  return (
+    !STRIPPED_DOWNSTREAM_HEADERS.has(normalizedHeaderName) &&
+    !STRIPPED_DOWNSTREAM_HEADER_PREFIXES.some((prefix) =>
+      normalizedHeaderName.startsWith(prefix)
+    )
+  )
+}
+
+function createDownstreamHeaders (upstreamResponse: Response, origin: string): Headers {
+  const headers = new Headers()
+
+  for (const [name, value] of upstreamResponse.headers) {
+    if (shouldForwardDownstreamHeader(name)) {
+      headers.append(name, value)
+    }
+  }
+
+  headers.set('Access-Control-Allow-Origin', origin)
+  headers.set('Access-Control-Expose-Headers', '*')
+  headers.set('Cross-Origin-Resource-Policy', 'same-site')
+  headers.set('X-Content-Type-Options', 'nosniff')
+  // The edge cache keys on URL and ignores Vary, so a cacheable upstream response
+  // could be replayed to a different origin with the wrong Allow-Origin header.
+  headers.set('Cache-Control', NO_STORE_CACHE_CONTROL)
+  headers.set('Vary', FETCH_METADATA_VARY_VALUE)
+
+  return headers
 }
 
 function renderStatusPage (lines: string[]): string {
@@ -519,6 +709,14 @@ function getDocumentErrorResponse (targetUrlState: TargetUrlState): Response {
         )),
         403
       )
+    case 'blocked':
+      return htmlResponse(
+        renderStatusPage(getErrorLines(
+          'Target host is not reachable through this proxy.',
+          'Private, loopback, link-local and reserved hosts are blocked.'
+        )),
+        403
+      )
     case 'valid':
       return htmlResponse(
         renderStatusPage(getUnauthorizedLines(targetUrlState.targetUrl)),
@@ -536,6 +734,8 @@ function getTextErrorResponse (targetUrlState: TargetUrlState): Response {
       return textResponse(getInvalidUrlMessage(), 400)
     case 'unsupported':
       return textResponse(getUnsupportedUrlMessage(), 403)
+    case 'blocked':
+      return textResponse(getBlockedUrlMessage(), 403)
     case 'valid':
       return textResponse(getUnauthorizedMessage(targetUrlState.targetUrl), 403)
   }
@@ -582,6 +782,8 @@ export default {
         return textResponse(getInvalidUrlMessage(), 400, corsHeaders)
       case 'unsupported':
         return textResponse(getUnsupportedUrlMessage(), 403, corsHeaders)
+      case 'blocked':
+        return textResponse(getBlockedUrlMessage(), 403, corsHeaders)
       case 'absent':
         break
       case 'valid':
@@ -635,29 +837,91 @@ export default {
     }
 
     async function handleRequest (request: Request, targetUrl: URL) {
-      const upstreamHeaders = createUpstreamHeaders(request, targetUrl)
+      const upstreamHeaders = createUpstreamHeaders(request)
+      const hasBody = request.method !== 'GET' && request.method !== 'HEAD'
 
-      const upstreamInit: RequestInit = {
-        method: request.method,
-        headers: upstreamHeaders,
-        redirect: 'follow'
+      let body: ArrayBuffer | null = null
+
+      if (hasBody) {
+        const declaredLength = Number(request.headers.get('Content-Length') ?? '')
+
+        if (Number.isFinite(declaredLength) && declaredLength > MAX_REQUEST_BODY_BYTES) {
+          return textResponse(
+            getErrorMessage('Request body too large.'),
+            413,
+            corsHeaders
+          )
+        }
+
+        // Buffered rather than streamed so the body can be replayed across a
+        // 307/308 redirect, and so an unbounded upload cannot be relayed.
+        body = await request.arrayBuffer()
+
+        if (body.byteLength > MAX_REQUEST_BODY_BYTES) {
+          return textResponse(
+            getErrorMessage('Request body too large.'),
+            413,
+            corsHeaders
+          )
+        }
       }
 
-      if (request.method !== 'GET' && request.method !== 'HEAD') {
-        upstreamInit.body = request.body
+      let currentUrl = targetUrl
+      let currentMethod = request.method
+      let currentBody = body
+
+      for (let hop = 0; hop <= MAX_UPSTREAM_REDIRECTS; hop++) {
+        const upstreamResponse = await fetch(currentUrl.toString(), {
+          method: currentMethod,
+          headers: upstreamHeaders,
+          body: currentBody,
+          redirect: 'manual'
+        })
+
+        const location = upstreamResponse.headers.get('Location')
+
+        if (!REDIRECT_STATUSES.has(upstreamResponse.status) || location === null) {
+          return new Response(upstreamResponse.body, {
+            status: upstreamResponse.status,
+            statusText: upstreamResponse.statusText,
+            headers: createDownstreamHeaders(upstreamResponse, origin)
+          })
+        }
+
+        let nextUrl: URL
+
+        try {
+          nextUrl = new URL(location, currentUrl)
+        } catch {
+          return textResponse(
+            getErrorMessage('Upstream returned an invalid redirect.'),
+            502,
+            corsHeaders
+          )
+        }
+
+        // Every hop is revalidated; otherwise a permitted target could redirect
+        // the proxy into a private or reserved host.
+        if (!isAllowedTargetUrl(nextUrl) || isBlockedTargetUrl(nextUrl)) {
+          return textResponse(getBlockedUrlMessage(), 403, corsHeaders)
+        }
+
+        if (upstreamResponse.status === 303 ||
+          ((upstreamResponse.status === 301 || upstreamResponse.status === 302) &&
+            currentMethod === 'POST')) {
+          currentMethod = 'GET'
+          currentBody = null
+          upstreamHeaders.delete('content-type')
+        }
+
+        currentUrl = nextUrl
       }
 
-      const upstreamResponse = await fetch(targetUrl.toString(), upstreamInit)
-      const response = new Response(upstreamResponse.body, upstreamResponse)
-
-      response.headers.set('Access-Control-Allow-Origin', origin)
-      response.headers.set('Access-Control-Expose-Headers', '*')
-      response.headers.append('Vary', 'Origin')
-      response.headers.append('Vary', 'Sec-Fetch-Site')
-      response.headers.append('Vary', 'Sec-Fetch-Mode')
-      response.headers.append('Vary', 'Sec-Fetch-Dest')
-
-      return response
+      return textResponse(
+        getErrorMessage('Too many redirects from the target URL.'),
+        502,
+        corsHeaders
+      )
     }
 
     if (targetUrlState.kind === 'valid') {
