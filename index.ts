@@ -70,6 +70,10 @@ const MAX_UPSTREAM_REDIRECTS = 5
 const MAX_REQUEST_BODY_BYTES = 10 * 1024 * 1024
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308])
 const PROXY_HOSTNAME = new URL(proxyConfig.publicUrl).hostname.toLowerCase()
+const RELAY_HOSTNAME = new URL(proxyConfig.relayUrl).hostname.toLowerCase()
+const RELAY_RETRY_STATUSES = new Set(proxyConfig.relayRetryStatuses)
+const RELAY_SECRET_HEADER = 'x-relay-secret'
+const RELAY_TARGET_HEADER = 'x-relay-target'
 const BLOCKED_TARGET_HOSTNAMES = new Set(['localhost', ''])
 const BLOCKED_TARGET_HOSTNAME_SUFFIXES = [
   '.localhost',
@@ -77,6 +81,10 @@ const BLOCKED_TARGET_HOSTNAME_SUFFIXES = [
   '.internal',
   '.home.arpa'
 ]
+
+interface Env {
+  RELAY_SECRET?: string
+}
 
 type TargetUrlState =
   | { kind: 'absent' }
@@ -204,7 +212,7 @@ function isBlockedIpv6 (hostname: string): boolean {
 function isBlockedTargetHostname (hostname: string): boolean {
   const normalizedHostname = hostname.toLowerCase().replace(/\.$/, '')
 
-  if (normalizedHostname === PROXY_HOSTNAME) {
+  if (normalizedHostname === PROXY_HOSTNAME || normalizedHostname === RELAY_HOSTNAME) {
     return true // prevents recursive self-proxying
   }
 
@@ -529,6 +537,33 @@ function createDownstreamHeaders (upstreamResponse: Response, origin: string): H
   return headers
 }
 
+// Outbound fetches from this zone fail with 525 for some Cloudflare-fronted
+// hosts (github.com, api.github.com) while the same fetch from workers.dev
+// succeeds, so those hops are retried once through the relay Worker.
+async function fetchUpstream (
+  url: URL,
+  init: { method: string, headers: Headers, body: ArrayBuffer | null },
+  env: Env
+): Promise<Response> {
+  const response = await fetch(url.toString(), { ...init, redirect: 'manual' })
+
+  if (!RELAY_RETRY_STATUSES.has(response.status) || !env.RELAY_SECRET) {
+    return response
+  }
+
+  await response.body?.cancel()
+
+  const relayHeaders = new Headers(init.headers)
+  relayHeaders.set(RELAY_SECRET_HEADER, env.RELAY_SECRET)
+  relayHeaders.set(RELAY_TARGET_HEADER, url.toString())
+
+  return await fetch(proxyConfig.relayUrl, {
+    ...init,
+    headers: relayHeaders,
+    redirect: 'manual'
+  })
+}
+
 function renderStatusPage (lines: string[]): string {
   const lineMarkup = lines.map((line) => `<div class="line">${line}</div>`).join('')
 
@@ -750,7 +785,7 @@ function publicErrorResponse (request: Request, targetUrlState: TargetUrlState):
 }
 
 export default {
-  async fetch (request: Request) {
+  async fetch (request: Request, env: Env) {
     const url = new URL(request.url)
 
     if (url.pathname === '/favicon.ico') {
@@ -871,12 +906,11 @@ export default {
       let currentBody = body
 
       for (let hop = 0; hop <= MAX_UPSTREAM_REDIRECTS; hop++) {
-        const upstreamResponse = await fetch(currentUrl.toString(), {
+        const upstreamResponse = await fetchUpstream(currentUrl, {
           method: currentMethod,
           headers: upstreamHeaders,
-          body: currentBody,
-          redirect: 'manual'
-        })
+          body: currentBody
+        }, env)
 
         const location = upstreamResponse.headers.get('Location')
 

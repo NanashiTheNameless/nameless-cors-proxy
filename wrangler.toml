@@ -1,4 +1,7 @@
 # wrangler.toml (wrangler ^4.71.0)
+#
+# Optional RELAY_SECRET secret enables retrying 525 hops through relay/:
+#   wrangler secret put RELAY_SECRET
 
 name="nameless-cors-proxy"
 main="index.ts"
