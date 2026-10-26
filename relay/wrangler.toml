@@ -1,0 +1,17 @@
+# wrangler.toml (wrangler ^4.71.0)
+#
+# Relay for hops that fail with 525 from the main proxy's zone.
+# Requires the RELAY_SECRET secret, shared with the main proxy:
+#   wrangler secret put RELAY_SECRET --config relay/wrangler.toml
+
+name="nameless-cors-relay"
+main="index.ts"
+compatibility_date="2026-02-24"
+
+workers_dev=true
+preview_urls=false
+
+send_metrics=false
+
+[observability]
+enabled=false
